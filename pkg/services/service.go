@@ -39,8 +39,9 @@ func GetKeyDb(cnfgName string) string {
 
 }
 
-func AddRequest(request []string) error {
+func AddRequest(msgId int, textMessage string) error {
 
+	request := []string{strconv.Itoa(msgId), textMessage}
 	file, err := os.OpenFile("dataRequestsId.csv", os.O_APPEND|os.O_WRONLY, os.ModeAppend)
 	if err != nil {
 		return err
@@ -59,31 +60,33 @@ func AddRequest(request []string) error {
 
 }
 
-func SearchRequstId(msgId int) string {
+func SearchRequstId(msgId int) (string, error) {
 	msgIdstr := strconv.Itoa(msgId)
 
 	file, err := os.Open("dataRequestsId.csv")
 	if err != nil {
-		log.Fatal(err)
+		return "", err
 	}
 	defer file.Close()
 
 	reader := csv.NewReader(file)
 	records, err := reader.ReadAll()
 	if err != nil {
-		log.Fatal(err)
+		return "", err
 	}
 
 	for _, row := range records {
 		if row[0] == msgIdstr {
-			return row[1]
+			return row[1], nil
 		}
 	}
 
-	return ""
+	return "", nil
 }
 
-func AddInlineKeyboard(inlineKeyboard []string) error {
+func AddInlineKeyboard(msgId, numButtons int) error {
+
+	inlineKeyboard := []string{strconv.Itoa(msgId), strconv.Itoa(numButtons)}
 
 	file, err := os.OpenFile("dataInlineId.csv", os.O_APPEND|os.O_WRONLY, os.ModeAppend)
 	if err != nil {
@@ -103,30 +106,30 @@ func AddInlineKeyboard(inlineKeyboard []string) error {
 
 }
 
-func SeachKeyboardId(msgId int) int {
+func SeachKeyboardId(msgId int) (int, error) {
 
 	msgIdstr := strconv.Itoa(msgId)
 
 	file, err := os.Open("dataInlineId.csv")
 	if err != nil {
-		log.Fatal(err)
+		return 0, err
 	}
 	defer file.Close()
 
 	reader := csv.NewReader(file)
 	records, err := reader.ReadAll()
 	if err != nil {
-		log.Fatal(err)
+		return 0, err
 	}
 
 	for _, row := range records {
 		if row[0] == msgIdstr {
 			numButtons, _ := strconv.Atoi(row[1])
-			return numButtons
+			return numButtons, nil
 		}
 	}
 
-	return 0
+	return 0, nil
 
 }
 
