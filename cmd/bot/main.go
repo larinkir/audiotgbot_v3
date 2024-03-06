@@ -13,7 +13,7 @@ import (
 func main() {
 
 	//Получение токена Бота
-	tgbottoken := services.GetToken("cnfg.env")
+	tgBotToken := services.GetToken("cnfg.env")
 
 	//Получение ключа ДБ
 	dataSourceName := services.GetKeyDb("cnfg.env")
@@ -22,7 +22,7 @@ func main() {
 	defer dbConnect.Close()
 
 	//Создание объекта Бота
-	bot, err := tgbotapi.NewBotAPI(tgbottoken)
+	bot, err := tgbotapi.NewBotAPI(tgBotToken)
 	if err != nil {
 		log.Panic(err)
 	}

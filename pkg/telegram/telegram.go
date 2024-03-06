@@ -20,7 +20,7 @@ func WorkBot(bot *tgbotapi.BotAPI, dbConnect *sql.DB) {
 
 	updates, err := bot.GetUpdatesChan(u)
 	if err != nil {
-		log.Fatal("Ошибка при получении апдейтов:", err)
+		log.Fatal("Ошибка в telegram.go -> GetUpdatesChan:", err)
 	}
 
 	for update := range updates {
@@ -28,16 +28,31 @@ func WorkBot(bot *tgbotapi.BotAPI, dbConnect *sql.DB) {
 
 			// Обработка команд
 			if update.Message.IsCommand() {
-				handlerCommand(update, bot, dbConnect)
+				err := handlerCommand(update, bot, dbConnect)
+				if err != nil {
+					log.Println("Ошибка в telegram.go - > handlerCommand", err)
+				}
+				continue
+			}
+
+			//Обработка файлов
+			if isAudioFile(update.Message) {
+				handlerFile(update.Message.Audio)
 				continue
 			}
 
 			//Обработка запроса пользователя
-			handlerRequsts(update, bot, dbConnect)
+			err := handlerRequests(update, bot, dbConnect)
+			if err != nil {
+				log.Println("Ошибка в telegram.go -> handlerRequests", err)
+			}
 
 			//Обработка обновлений с инлайн клваиатуры
 		} else if update.CallbackQuery != nil {
-			handlerUpdKeyboard(update, bot, dbConnect)
+			err := handlerUpdKeyboard(update, bot, dbConnect)
+			if err != nil {
+				log.Println("Ошибка в telegram.go -> handlerUpdKeyboard", err)
+			}
 
 		}
 
@@ -85,28 +100,42 @@ func makeButtonsNext(numButtons, updateButton int) tgbotapi.InlineKeyboardMarkup
 }
 
 // Обработчик команд
-func handlerCommand(update tgbotapi.Update, bot *tgbotapi.BotAPI, dbConnect *sql.DB) {
+func handlerCommand(update tgbotapi.Update, bot *tgbotapi.BotAPI, dbConnect *sql.DB) error {
 	switch {
 	case update.Message.Text == "/start":
-		bot.Send(tgbotapi.NewMessage(update.Message.Chat.ID, "Бот запущен."))
-		bot.Send(tgbotapi.NewMessage(update.Message.Chat.ID, "Для поиска книги, напишите название в сообщении."))
+		_, err := bot.Send(tgbotapi.NewMessage(update.Message.Chat.ID, "Бот запущен."))
+		if err != nil {
+			return err
+		}
+		_, err = bot.Send(tgbotapi.NewMessage(update.Message.Chat.ID, "Для поиска книги, напишите название в сообщении."))
+		if err != nil {
+			return err
+		}
 
-	case update.Message.Text[:2] == "/b":
-		file_id := db.SearchFileBook(update.Message.Text, dbConnect)
-		bot.Send(tgbotapi.NewAudioShare(update.Message.Chat.ID, file_id))
+	case update.Message.Text[:5] == "/book":
+		fileId := db.SearchFileBook(update.Message.Text[5:], dbConnect)
+		_, err := bot.Send(tgbotapi.NewAudioShare(update.Message.Chat.ID, fileId))
+		if err != nil {
+			return err
+		}
 
 	default:
-		bot.Send(tgbotapi.NewMessage(update.Message.Chat.ID, "Неизвестная команда."))
+		_, err := bot.Send(tgbotapi.NewMessage(update.Message.Chat.ID, "Неизвестная команда."))
+		if err != nil {
+			return err
+		}
 	}
+
+	return nil
 
 }
 
-func handlerRequsts(update tgbotapi.Update, bot *tgbotapi.BotAPI, dbConnect *sql.DB) {
+func handlerRequests(update tgbotapi.Update, bot *tgbotapi.BotAPI, dbConnect *sql.DB) error {
 
 	//Добавление запроса с Id в историю запросов
 	err := services.AddRequest(update.Message.MessageID, update.Message.Text)
 	if err != nil {
-		log.Println("Ошибка в функции AddRequest:", err)
+		log.Println("Ошибка в handlerRequests -> AddRequest:", err)
 	}
 
 	//Формирование списка книг из БД
@@ -119,7 +148,10 @@ func handlerRequsts(update tgbotapi.Update, bot *tgbotapi.BotAPI, dbConnect *sql
 	//Если книг не найдено
 	case numBook == 0:
 		msg := tgbotapi.NewMessage(update.Message.Chat.ID, "Такую книгу найти не удалось.")
-		bot.Send(msg)
+		_, err := bot.Send(msg)
+		if err != nil {
+			return err
+		}
 
 		//Если количество книг <= 5
 	case numBook <= 5:
@@ -128,7 +160,10 @@ func handlerRequsts(update tgbotapi.Update, bot *tgbotapi.BotAPI, dbConnect *sql
 		}
 		msg := tgbotapi.NewMessage(update.Message.Chat.ID, books)
 		msg.ParseMode = "HTML"
-		bot.Send(msg)
+		_, err = bot.Send(msg)
+		if err != nil {
+			return err
+		}
 
 		//Если количество книг >5 вызывается инлайн клавиатура
 	case numBook > 5:
@@ -154,16 +189,25 @@ func handlerRequsts(update tgbotapi.Update, bot *tgbotapi.BotAPI, dbConnect *sql
 		//Вызов инлайн клавиатуры
 		numericKeyboard := makeButtonsFirst(numButtons)
 		msg.ReplyMarkup = numericKeyboard
-		bot.Send(msg)
+		_, err = bot.Send(msg)
+		if err != nil {
+			return err
+		}
 
 	}
 
+	return nil
+
 }
 
-func handlerUpdKeyboard(update tgbotapi.Update, bot *tgbotapi.BotAPI, dbConnect *sql.DB) {
+func handlerUpdKeyboard(update tgbotapi.Update, bot *tgbotapi.BotAPI, dbConnect *sql.DB) error {
 
 	//Обработать ошибку!
-	updateButton, _ := strconv.Atoi(update.CallbackQuery.Data)
+	updateButton, err := strconv.Atoi(update.CallbackQuery.Data)
+	if err != nil {
+		log.Println("Ошибка при чтении update в функции -> handlerUpdKeyboard ")
+		return err
+	}
 
 	// Id обновления с инлайн клавиатуры
 	msgId := update.CallbackQuery.Message.MessageID
@@ -171,7 +215,8 @@ func handlerUpdKeyboard(update tgbotapi.Update, bot *tgbotapi.BotAPI, dbConnect 
 	//Извлечение запроса из истори запросов по ID
 	request, err := services.SearchRequstId(msgId - 1)
 	if err != nil {
-		log.Println("Ошибка в функции SearchRequstId:", err)
+		log.Println("Ошибка в функции SearchRequestId:", err)
+		return err
 	}
 
 	//Формирование списка книг из БД
@@ -191,9 +236,9 @@ func handlerUpdKeyboard(update tgbotapi.Update, bot *tgbotapi.BotAPI, dbConnect 
 	}
 
 	//Поиск количества кнопок по Id сообщения
-	numButtons, err := services.SeachKeyboardId(msgId - 1)
+	numButtons, err := services.SearchKeyboardId(msgId - 1)
 	if err != nil {
-		log.Println("Ошибка в функции SeachKeyboardId:", err)
+		log.Println("Ошибка в функции SearchKeyboardId:", err)
 	}
 
 	//Вызов инлайн клавиатуры
@@ -203,6 +248,29 @@ func handlerUpdKeyboard(update tgbotapi.Update, bot *tgbotapi.BotAPI, dbConnect 
 	msg := tgbotapi.NewEditMessageText(update.CallbackQuery.Message.Chat.ID, msgId, books)
 	msg.ReplyMarkup = &numericKeyboard
 	msg.ParseMode = "HTML"
-	bot.Send(msg)
+	_, err = bot.Send(msg)
+	if err != nil {
+		return err
+	}
+	return nil
+}
 
+// Проверка присутствия в сообщении audio файла.
+func isAudioFile(m *tgbotapi.Message) bool {
+	if m.Audio != nil {
+		return true
+	}
+	return false
+}
+
+func handlerFile(audio *tgbotapi.Audio) {
+
+	title := audio.Title
+	performer := audio.Performer
+	fileId := audio.FileID
+
+	err := services.AddBooks(title, performer, fileId)
+	if err != nil {
+		log.Println("Ошибка в handlerFile -> AddBooks", err)
+	}
 }

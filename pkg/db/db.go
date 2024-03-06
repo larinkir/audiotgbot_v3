@@ -7,6 +7,13 @@ import (
 	"strings"
 )
 
+type Book struct {
+	book_id   int
+	book_name string
+	author    string
+	reader    string
+}
+
 // Подключение к ДБ
 func ConnectToDb(dataSourceName string) *sql.DB {
 	db, err := sql.Open("postgres", dataSourceName)
@@ -17,59 +24,55 @@ func ConnectToDb(dataSourceName string) *sql.DB {
 }
 
 // Поиск книг в ДБ
-func searchBookInDb(formatRequst string, db *sql.DB) *sql.Rows {
-	rows, err := db.Query("SELECT * FROM books WHERE to_tsvector('russian', author) @@ to_tsquery('russian', $1) OR to_tsvector('russian', book_name) @@ to_tsquery('russian', $1) ", formatRequst)
+func searchBookInDb(formatRequest string, db *sql.DB) *sql.Rows {
+
+	rows, err := db.Query("SELECT books.id, books.name, authors.name, performers.name "+
+		"FROM books "+
+		"join authors on books.author_id = authors.id "+
+		"join performers on books.performer_id = performers.id "+
+		"WHERE to_tsvector('russian', authors.name) @@ to_tsquery('russian', $1) OR to_tsvector('russian', books.name) @@ to_tsquery('russian', $1) ", formatRequest)
 	if err != nil {
 		log.Fatal("Ошибка в функции searchBookInDb:", err)
 	}
+	fmt.Println("Строка rows:", rows)
 	return rows
 }
 
 // Формирование списка книг из БД
 func MakeListBooks(requestBook string, dbConnect *sql.DB) ([]string, int) {
 
-	type Book struct {
-		book_name string
-		author    string
-		reader    string
-		file_id   string
-		book_id   string
-	}
-
-	//Количество найденных книг
-	var numBook int
-
 	//Сформированный список книг
 	var listBooks []string
 
-	formatRequst := strings.Replace(requestBook, " ", "&", -1)
+	formatRequest := strings.Replace(requestBook, " ", "&", -1)
 
-	rows := searchBookInDb(formatRequst, dbConnect)
+	rows := searchBookInDb(formatRequest, dbConnect)
 
 	defer rows.Close()
 
 	for rows.Next() {
 
 		bk := new(Book)
-		err := rows.Scan(&bk.book_id, &bk.book_name, &bk.author, &bk.reader, &bk.file_id)
+		err := rows.Scan(&bk.book_id, &bk.book_name, &bk.author, &bk.reader)
 		if err != nil {
 			log.Fatal("Ошибка в функции MakeListBooks. Не удалось распарсить данные в структуру Book. ", err)
 		}
 
-		book := fmt.Sprintf("📖 <b>%s.</b>\n  Автор: %s | Читает: %s\n %s\n\n", bk.book_name, bk.author, bk.reader, bk.book_id)
+		book := fmt.Sprintf("📖 <b>%s.</b>\n  Автор: %s | Читает: %s\n /book%d\n\n", bk.book_name, bk.author, bk.reader, bk.book_id)
 		listBooks = append(listBooks, book)
-		numBook++
+
 	}
 
-	return listBooks, numBook
+	return listBooks, len(listBooks)
 }
 
 // Поиск файла книги в БД
 func SearchFileBook(book_id string, dbConnect *sql.DB) string {
 
+	//Поменять название  file_id
 	var file_id string
 
-	err := dbConnect.QueryRow("SELECT file_id FROM books WHERE book_id = $1", book_id).Scan(&file_id)
+	err := dbConnect.QueryRow("SELECT file_id FROM books WHERE id = $1", book_id).Scan(&file_id)
 	if err != nil {
 		log.Fatal("Ошибка в функции SearchFileBook:", err)
 	}

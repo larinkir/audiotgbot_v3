@@ -10,21 +10,22 @@ import (
 	"github.com/joho/godotenv"
 )
 
-// Получение токена Телеграмм Бота
-func GetToken(cnfgName string) string {
-	err := godotenv.Load(cnfgName)
+// Получение токена Бота
+func GetToken(configName string) string {
+	err := godotenv.Load(configName)
 	if err != nil {
 		log.Fatal("Error loading .env file")
 	}
 
-	tgbottoken := os.Getenv("TG_BOT_TOKEN")
+	tgBotToken := os.Getenv("TG_BOT_TOKEN")
 
-	return tgbottoken
+	return tgBotToken
 }
 
-func GetKeyDb(cnfgName string) string {
+// Получение данных ДБ
+func GetKeyDb(configName string) string {
 
-	err := godotenv.Load(cnfgName)
+	err := godotenv.Load(configName)
 	if err != nil {
 		log.Fatal("Error loading .env file")
 	}
@@ -39,6 +40,7 @@ func GetKeyDb(cnfgName string) string {
 
 }
 
+// Сохранение запроса от пользователя вместе с Id
 func AddRequest(msgId int, textMessage string) error {
 
 	request := []string{strconv.Itoa(msgId), textMessage}
@@ -60,7 +62,9 @@ func AddRequest(msgId int, textMessage string) error {
 
 }
 
+// Поиск запроса по id
 func SearchRequstId(msgId int) (string, error) {
+	//Перенести переменную перед использованием (перенести на 78 строку)
 	msgIdstr := strconv.Itoa(msgId)
 
 	file, err := os.Open("dataRequestsId.csv")
@@ -84,6 +88,7 @@ func SearchRequstId(msgId int) (string, error) {
 	return "", nil
 }
 
+// Сохранение количества страниц для инлайн клавиатуры
 func AddInlineKeyboard(msgId, numButtons int) error {
 
 	inlineKeyboard := []string{strconv.Itoa(msgId), strconv.Itoa(numButtons)}
@@ -106,7 +111,7 @@ func AddInlineKeyboard(msgId, numButtons int) error {
 
 }
 
-func SeachKeyboardId(msgId int) (int, error) {
+func SearchKeyboardId(msgId int) (int, error) {
 
 	msgIdstr := strconv.Itoa(msgId)
 
@@ -135,6 +140,7 @@ func SeachKeyboardId(msgId int) (int, error) {
 
 func AddBooks(title, author, file_id string) error {
 	file, err := os.OpenFile("books_db.csv", os.O_WRONLY|os.O_APPEND, 0644)
+
 	if err != nil {
 		return err
 	}
@@ -142,9 +148,13 @@ func AddBooks(title, author, file_id string) error {
 	defer file.Close()
 
 	writer := csv.NewWriter(file)
+	writer.Comma = ';'
 	defer writer.Flush()
 
-	writer.Write([]string{title, author, file_id})
+	err = writer.Write([]string{title, author, file_id})
+	if err != nil {
+		return err
+	}
 
 	return nil
 }
